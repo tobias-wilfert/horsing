@@ -1,0 +1,15 @@
+{
+  "name": "chess-pieces",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "chess_pieces_bg.wasm",
+    "chess_pieces.js",
+    "chess_pieces.d.ts"
+  ],
+  "main": "chess_pieces.js",
+  "types": "chess_pieces.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
