@@ -1,5 +1,3 @@
-use image::{ImageBuffer, Rgb};
-
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy)]
@@ -179,40 +177,6 @@ impl Game {
             })
             .collect()
     }
-
-    // Simple version with 2 horses
-
-    fn horse(pos: Position) -> Vec<Position> {
-        let Position { y, x } = pos;
-
-        vec![
-            // Position::new(y - 1, x - 2),
-            Position::new(y - 2, x - 1),
-            // Position::new(y - 2, x + 1),
-            // Position::new(y - 1, x + 2),
-            // Position::new(y + 1, x + 2),
-            Position::new(y + 2, x + 1),
-            // Position::new(y + 2, x - 1),
-            // Position::new(y + 1, x - 2),
-        ]
-    }
-
-    fn pawn(pos: Position) -> Vec<Position> {
-        let Position { y, x } = pos;
-
-        vec![
-            Position::new(y - 2, x - 1),
-            Position::new(y - 2, x + 1),
-            Position::new(y + 2, x - 1),
-            // Position::new(y + 2, x + 1),
-            // Position::new(y - 2, x + 1),
-            // Position::new(y - 1, x + 2),
-            // Position::new(y + 1, x + 2),
-            // Position::new(y + 2, x + 1),
-            // Position::new(y + 2, x - 1),
-            // Position::new(y + 1, x - 2),
-        ]
-    }
 }
 
 use wasm_bindgen::prelude::*;
@@ -251,53 +215,3 @@ pub fn generate(size: usize, offsets_a: &[i32], offsets_b: &[i32]) -> GridResult
         data: game.inner.into_iter().flatten().collect(),
     }
 }
-
-// fn main() {
-//     let n = 4000;
-
-//     let mut g = Game::new(n);
-
-//     // for row in &g.inner {
-//     //     for v in row {
-//     //         if v == &1 {
-//     //             print!("\x1b[41m \x1b[0m");
-//     //             // print!("#")
-//     //         } else if v == &2 {
-//     //             print!("\x1b[44m \x1b[0m");
-//     //         } else {
-//     //             print!(" ");
-//     //         }
-//     //     }
-//     //     println!("");
-//     // }
-
-//     g.step();
-
-//     let h = g.inner.len() as u32;
-//     let w = g.inner[0].len() as u32;
-//     let img = ImageBuffer::from_fn(w, h, |x, y| {
-//         let v = g.inner[y as usize][x as usize];
-//         if v == 1 {
-//             Rgb([30u8, 16u8, 78u8])
-//         } else if v == 2 {
-//             Rgb([255u8, 200u8, 92u8])
-//         } else {
-//             Rgb([255u8, 255u8, 255u8])
-//         }
-//     });
-//     img.save(format!("{}_auto.png", n)).unwrap();
-
-//     // for row in &g.inner {
-//     //     for v in row {
-//     //         if v == &1 {
-//     //             print!("\x1b[41m \x1b[0m");
-//     //             // print!("#")
-//     //         } else if v == &2 {
-//     //             print!("\x1b[44m \x1b[0m");
-//     //         } else {
-//     //             print!(" ");
-//     //         }
-//     //     }
-//     //     println!("");
-//     // }
-// }
