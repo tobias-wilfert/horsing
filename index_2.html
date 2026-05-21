@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      canvas {
+        width: 90vmin;
+        height: 90vmin;
+        image-rendering: pixelated; /* keep cells crisp */
+        border: 1px solid #ccc;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+      import init, { generate } from "./pkg/chess_pieces.js";
+
+      // Load the WASM module. `wasm` exposes the linear memory.
+      const wasm = await init();
+
+      // Call your Rust function.
+      const pawn = new Int32Array([-2, -1, -2, 1, 2, -1]);
+      const knight = new Int32Array([
+        -2, -1, -2, 1, -1, 2, 1, 2, 2, 1, 2, -1, 1, -2, -1, -2,
+      ]);
+
+      const n = 4000;
+      console.log(`Generating a ${n}x${n} image...`);
+      const result = generate(n, knight, knight);
+      console.log(result);
+      const w = n;
+      const h = n;
+
+      // Create a view directly into WASM memory — no copying.
+      const cells = new Int32Array(
+        wasm.memory.buffer,
+        result.data_ptr(),
+        result.data_len(),
+      );
+
+      // Build an RGBA image. Map each i32 value to a color.
+      const rgba = new Uint8ClampedArray(w * h * 4);
+      for (let i = 0; i < cells.length; i++) {
+        const v = cells[i];
+        let r, g, b;
+        if (v === 1) {
+          r = 255;
+          g = 0;
+          b = 0;
+        } // red
+        else if (v === 2) {
+          r = 0;
+          g = 0;
+          b = 255;
+        } // blue
+        else {
+          r = 255;
+          g = 255;
+          b = 255;
+        } // white
+        const j = i * 4;
+        rgba[j] = r;
+        rgba[j + 1] = g;
+        rgba[j + 2] = b;
+        rgba[j + 3] = 255;
+      }
+
+      // Blit it to the canvas in one operation.
+      const canvas = document.getElementById("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.putImageData(new ImageData(rgba, w, h), 0, 0);
+    </script>
+  </body>
+</html>

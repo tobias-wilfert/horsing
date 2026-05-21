@@ -1,0 +1,225 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      :root {
+        --bg: #faf9f6;
+        --ink: #1c1c1a;
+        --muted: #6b6b66;
+        --line: #d8d6cf;
+        --card: #ffffff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 2rem 1.5rem;
+        font-family: ui-sans-serif, system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5rem;
+      }
+      h1 { font-size: 1.25rem; font-weight: 600; margin: 0; }
+      .editors { display: flex; gap: 1.5rem; flex-wrap: wrap; justify-content: center; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 1rem 1.25rem;
+        min-width: 240px;
+      }
+      .card-head {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; margin-bottom: 12px;
+      }
+      .card-head .title { font-weight: 600; }
+      .card-head .tag { font-size: 12px; color: var(--muted); margin-left: 6px; }
+      input[type="color"] {
+        width: 30px; height: 30px; padding: 0; border: 1px solid var(--line);
+        border-radius: 8px; background: none; cursor: pointer;
+      }
+      .board { display: grid; gap: 3px; justify-content: center; }
+      .cell {
+        width: 26px; height: 26px; border: 1px solid var(--line);
+        border-radius: 4px; background: #fff; cursor: pointer; padding: 0;
+        font-size: 13px; font-weight: 700; color: var(--muted);
+        display: flex; align-items: center; justify-content: center;
+      }
+      .cell.on { background: currentColor; border-color: currentColor; }
+      .cell.center { cursor: default; background: #2c2c2a; border-color: #2c2c2a; color: #fff; }
+      .controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center; }
+      .controls label { font-size: 14px; color: var(--muted); }
+      button {
+        font: inherit; font-size: 14px; padding: 6px 14px; border-radius: 8px;
+        border: 1px solid var(--line); background: #fff; cursor: pointer;
+      }
+      button:hover { background: var(--bg); }
+      button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+      #status { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+      canvas {
+        width: 80vmin; height: 80vmin; max-width: 700px; max-height: 700px;
+        image-rendering: pixelated; border: 1px solid var(--line); border-radius: 8px;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Move editor</h1>
+
+    <div class="editors">
+      <div class="card" id="card-a">
+        <div class="card-head">
+          <div><span class="title">Moves A</span><span class="tag">value 1</span></div>
+          <input type="color" id="color-a" value="#ff0000" />
+        </div>
+        <div class="board" id="board-a"></div>
+      </div>
+
+      <div class="card" id="card-b">
+        <div class="card-head">
+          <div><span class="title">Moves B</span><span class="tag">value 2</span></div>
+          <input type="color" id="color-b" value="#0000ff" />
+        </div>
+        <div class="board" id="board-b"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <label>Editor radius</label>
+      <input type="range" id="radius" min="2" max="5" step="1" value="3" />
+      <span id="radius-out">3</span>
+      <label style="margin-left:1rem;">Grid size</label>
+      <input type="number" id="size" value="400" min="10" max="4000" step="10" style="width:80px; font:inherit; padding:5px; border:1px solid var(--line); border-radius:8px;" />
+      <button id="clear-a">Clear A</button>
+      <button id="clear-b">Clear B</button>
+      <button id="render" class="primary">Render</button>
+    </div>
+
+    <div id="status"></div>
+    <canvas id="canvas"></canvas>
+
+    <script type="module">
+      import init, { generate } from "./pkg/chess_pieces.js";
+      const wasm = await init();
+
+      // ---- editor state ----
+      // Each board tracks a Set of "dy,dx" strings for toggled (attacked) cells.
+      const state = {
+        radius: 3,
+        a: new Set(["-2,-1", "-2,1", "-1,2", "1,2", "2,1", "2,-1", "1,-2", "-1,-2"]), // knight default
+        b: new Set(["-2,-1", "-2,1", "-1,2", "1,2", "2,1", "2,-1", "1,-2", "-1,-2"]),
+      };
+
+      const k = (dy, dx) => `${dy},${dx}`;
+
+      function buildBoard(which) {
+        const board = document.getElementById("board-" + which);
+        const set = state[which];
+        const color = document.getElementById("color-" + which).value;
+        const r = state.radius;
+        const n = 2 * r + 1;
+        board.style.gridTemplateColumns = `repeat(${n}, 26px)`;
+        board.innerHTML = "";
+        for (let dy = -r; dy <= r; dy++) {
+          for (let dx = -r; dx <= r; dx++) {
+            const cell = document.createElement("button");
+            cell.className = "cell";
+            cell.style.color = color; // currentColor drives the .on fill
+            if (dy === 0 && dx === 0) {
+              cell.classList.add("center");
+              cell.textContent = "X";
+              cell.disabled = true;
+            } else {
+              const key = k(dy, dx);
+              if (set.has(key)) cell.classList.add("on");
+              cell.onclick = () => {
+                if (set.has(key)) set.delete(key);
+                else set.add(key);
+                cell.classList.toggle("on");
+              };
+            }
+            board.appendChild(cell);
+          }
+        }
+      }
+
+      // Convert a Set of "dy,dx" into the flat Int32Array [dy,dx,dy,dx,...]
+      function toDeltas(set) {
+        const flat = [];
+        for (const s of set) {
+          const [dy, dx] = s.split(",").map(Number);
+          flat.push(dy, dx);
+        }
+        return new Int32Array(flat);
+      }
+
+      function hexToRgb(hex) {
+        const n = parseInt(hex.slice(1), 16);
+        return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+      }
+
+      // ---- render via WASM ----
+      function render() {
+        const status = document.getElementById("status");
+        const size = Math.max(10, Math.min(4000, +document.getElementById("size").value));
+        const deltasA = toDeltas(state.a);
+        const deltasB = toDeltas(state.b);
+
+        status.textContent = `Generating ${size}×${size}…`;
+
+        // let the status paint before the heavy call
+        requestAnimationFrame(() => {
+          const t0 = performance.now();
+          const result = generate(size, deltasA, deltasB);
+          const w = size, h = size;
+
+          const cells = new Int32Array(
+            wasm.memory.buffer,
+            result.data_ptr(),
+            result.data_len(),
+          );
+
+          const colA = hexToRgb(document.getElementById("color-a").value);
+          const colB = hexToRgb(document.getElementById("color-b").value);
+
+          const rgba = new Uint8ClampedArray(w * h * 4);
+          for (let i = 0; i < cells.length; i++) {
+            const v = cells[i];
+            let c;
+            if (v === 1) c = colA;
+            else if (v === 2) c = colB;
+            else c = [255, 255, 255];
+            const j = i * 4;
+            rgba[j] = c[0]; rgba[j + 1] = c[1]; rgba[j + 2] = c[2]; rgba[j + 3] = 255;
+          }
+
+          const canvas = document.getElementById("canvas");
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").putImageData(new ImageData(rgba, w, h), 0, 0);
+
+          status.textContent = `Done: ${size}×${size} in ${(performance.now() - t0).toFixed(0)} ms`;
+        });
+      }
+
+      // ---- wiring ----
+      document.getElementById("radius").oninput = (e) => {
+        state.radius = +e.target.value;
+        document.getElementById("radius-out").textContent = state.radius;
+        buildBoard("a");
+        buildBoard("b");
+      };
+      document.getElementById("color-a").oninput = () => buildBoard("a");
+      document.getElementById("color-b").oninput = () => buildBoard("b");
+      document.getElementById("clear-a").onclick = () => { state.a.clear(); buildBoard("a"); };
+      document.getElementById("clear-b").onclick = () => { state.b.clear(); buildBoard("b"); };
+      document.getElementById("render").onclick = render;
+
+      buildBoard("a");
+      buildBoard("b");
+      render(); // initial render with knight defaults
+    </script>
+  </body>
+</html>
