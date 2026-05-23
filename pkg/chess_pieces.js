@@ -89,14 +89,14 @@ if (Symbol.dispose) Position.prototype[Symbol.dispose] = Position.prototype.free
 
 /**
  * @param {number} size
- * @param {Int32Array} offsets_a
- * @param {Int32Array} offsets_b
+ * @param {Int32Array} flat
+ * @param {Uint32Array} lengths
  * @returns {GridResult}
  */
-export function generate(size, offsets_a, offsets_b) {
-    const ptr0 = passArray32ToWasm0(offsets_a, wasm.__wbindgen_malloc);
+export function generate(size, flat, lengths) {
+    const ptr0 = passArray32ToWasm0(flat, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ptr1 = passArray32ToWasm0(offsets_b, wasm.__wbindgen_malloc);
+    const ptr1 = passArray32ToWasm0(lengths, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.generate(size, ptr0, len0, ptr1, len1);
     return GridResult.__wrap(ret);

@@ -98,88 +98,74 @@ impl Field {
 }
 
 struct BitMap {
-    inner: Vec<bool>,
-    ptr: usize,
+    inner: Vec<u32>,
+    ptrs: Vec<usize>,
 }
 
 impl BitMap {
-    fn new(n: usize) -> Self {
+    fn new(n: usize, p: usize) -> Self {
         Self {
-            inner: vec![true; n + 1],
-            ptr: 1,
+            inner: vec![0; n + 1],
+            ptrs: vec![1; p],
         }
     }
 
-    fn pop_first(&mut self) -> Option<usize> {
-        while self.ptr < self.inner.len() && !self.inner[self.ptr] {
-            self.ptr += 1;
+    fn next(&mut self, p: usize) -> Option<usize> {
+        let mask = 1u32 << p;
+        while self.ptrs[p] < self.inner.len()
+            && !(self.inner[self.ptrs[p]] == mask || self.inner[self.ptrs[p]] == 0)
+        {
+            self.ptrs[p] += 1;
         }
-        if self.ptr < self.inner.len() {
-            self.inner[self.ptr] = false;
-            Some(self.ptr)
+
+        if self.ptrs[p] < self.inner.len() {
+            self.inner[self.ptrs[p]] = u32::MAX;
+            Some(self.ptrs[p])
         } else {
             None
         }
     }
 
-    fn remove(&mut self, n: &usize) {
-        self.inner[*n] = false;
+    fn remove(&mut self, n: usize, p: usize) {
+        self.inner[n] |= 1 << p;
     }
 
     fn empty(&self) -> bool {
-        self.inner.len() == self.ptr
+        self.ptrs.iter().all(|&p| p == self.inner.len())
     }
 }
 
 struct Game {
     field: Field,
-    // FIXME: Have a game board?
     inner: Vec<Vec<i32>>,
-    a_pq: BitMap,
-    b_pq: BitMap,
-    move_a: Vec<(isize, isize)>,
-    move_b: Vec<(isize, isize)>,
+    map: BitMap,
+    moves: Vec<Vec<(isize, isize)>>,
 }
 
 impl Game {
-    fn new(n: usize, move_a: Vec<(isize, isize)>, move_b: Vec<(isize, isize)>) -> Self {
+    fn new(n: usize, moves: Vec<Vec<(isize, isize)>>) -> Self {
         Self {
             field: Field::new(n),
-            inner: vec![vec![0; n]; n],
-            a_pq: BitMap::new(n * n),
-            b_pq: BitMap::new(n * n),
-            move_a,
-            move_b,
+            inner: vec![vec![-1; n]; n],
+            map: BitMap::new(n * n, moves.len()),
+            moves,
         }
     }
 
     fn step(&mut self) {
-        while !self.a_pq.empty() || !self.b_pq.empty() {
-            if let Some(v) = self.a_pq.pop_first() {
-            let Position { y, x } = self.field.num_to_pos(v).unwrap();
-            self.inner[y as usize][x as usize] = 1;
+        while !self.map.empty() {
+            for p in 0..self.moves.len() {
+                if let Some(cell_num) = self.map.next(p) {
+                    let pos = self.field.num_to_pos(cell_num).unwrap();
+                    self.inner[pos.y as usize][pos.x as usize] = p as i32;
 
-            self.b_pq.remove(&v);
-            for cp in self
-                .apply(self.field.num_to_pos(v).unwrap(), &self.move_a)
-                .iter()
-                    .filter_map(|&p| self.field.pos_to_num(p))
-            {
-                self.b_pq.remove(&cp);
-                }
-            }
-
-            if let Some(v) = self.b_pq.pop_first() {
-                let Position { y, x } = self.field.num_to_pos(v).unwrap();
-                self.inner[y as usize][x as usize] = 2;
-
-                self.a_pq.remove(&v);
-                for cp in self
-                    .apply(self.field.num_to_pos(v).unwrap(), &self.move_b)
-                    .iter()
-                    .filter_map(|&p| self.field.pos_to_num(p))
-                {
-                    self.a_pq.remove(&cp);
+                    for a_cell in self
+                        .apply(pos, &self.moves[p])
+                        .iter()
+                        .filter_map(|&p| self.field.pos_to_num(p))
+                    {
+                        self.map.remove(a_cell, p);
+                    }
                 }
             }
         }
@@ -217,14 +203,44 @@ fn parse_offsets(flat: &[i32]) -> Vec<(isize, isize)> {
 }
 
 #[wasm_bindgen]
-pub fn generate(size: usize, offsets_a: &[i32], offsets_b: &[i32]) -> GridResult {
-    let moves_a = parse_offsets(offsets_a);
-    let moves_b = parse_offsets(offsets_b);
-    let mut game = Game::new(size, moves_a, moves_b);
-    game.step();
+pub fn generate(size: usize, flat: &[i32], lengths: &[u32]) -> GridResult {
+    let mut moves = Vec::with_capacity(lengths.len());
+    let mut start = 0;
+    for &len in lengths {
+        let piece = &flat[start..start + len as usize];
+        moves.push(parse_offsets(piece));
+        start += len as usize;
+    }
 
+    let mut game = Game::new(size, moves);
+    game.step();
     GridResult {
         size,
         data: game.inner.into_iter().flatten().collect(),
+    }
+}
+
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn test_t() {
+        let mut game = Game::new(
+            10,
+            vec![
+                parse_offsets(&[-2, -1, -2, 1, -1, 2, 1, 2, 2, 1, 2, -1, 1, -2, -1, -2]),
+                parse_offsets(&[-2, -1, -2, 1, -1, 2, 1, 2, 2, 1, 2, -1, 1, -2, -1, -2]),
+                parse_offsets(&[-2, -1, -2, 1, -1, 2, 1, 2, 2, 1, 2, -1, 1, -2, -1, -2]),
+            ],
+        );
+        game.step();
+
+        for r in game.inner {
+            for v in r {
+                print!("{}", v);
+            }
+            println!("");
+        }
     }
 }

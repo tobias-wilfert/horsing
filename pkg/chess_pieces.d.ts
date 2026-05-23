@@ -18,7 +18,7 @@ export class Position {
     y: number;
 }
 
-export function generate(size: number, offsets_a: Int32Array, offsets_b: Int32Array): GridResult;
+export function generate(size: number, flat: Int32Array, lengths: Uint32Array): GridResult;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
