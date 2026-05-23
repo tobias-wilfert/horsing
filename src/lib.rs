@@ -1,5 +1,3 @@
-use std::collections::{BTreeSet, HashMap};
-
 #[derive(Debug, Clone, Copy)]
 enum Direction {
     Right,
@@ -46,7 +44,7 @@ impl Position {
 
 struct Field {
     inner: Vec<Vec<usize>>,
-    lookup: HashMap<usize, Position>,
+    lookup: Vec<Position>,
 }
 
 impl Field {
@@ -56,9 +54,9 @@ impl Field {
         }
     }
 
-    // FIXME: This can be done nicer.
     fn num_to_pos(&self, num: usize) -> Option<Position> {
-        self.lookup.get(&num).copied()
+        let len = self.lookup.len();
+        self.lookup.get(len - num).copied()
     }
 
     fn pos_to_num(&self, pos: &Position) -> Option<usize> {
@@ -79,13 +77,13 @@ impl Field {
 
     fn new(n: usize) -> Self {
         let mut inner = vec![vec![0; n]; n];
-        let mut lookup = HashMap::new();
+        let mut lookup = Vec::with_capacity(n * n);
         let mut pos = Position { y: 0, x: 0 };
         let mut direction = Direction::Right;
 
         for c in (1..=(n * n)).rev() {
             inner[pos.y as usize][pos.x as usize] = c;
-            lookup.insert(c, pos);
+            lookup.push(pos);
             // Do a dummy move see if it gets us out of bounds
             // if not that is the move else make a turn and do the move
             let mut new_pos = pos.go(&direction);
@@ -99,12 +97,42 @@ impl Field {
     }
 }
 
+struct BitMap {
+    inner: Vec<bool>,
+    ptr: usize,
+}
+
+impl BitMap {
+    fn new(n: usize) -> Self {
+        Self {
+            inner: vec![true; n + 1],
+            ptr: 1,
+        }
+    }
+
+    fn pop_first(&mut self) -> Option<usize> {
+        while self.ptr < self.inner.len() && !self.inner[self.ptr] {
+            self.ptr += 1;
+        }
+        if self.ptr < self.inner.len() {
+            self.inner[self.ptr] = false;
+            Some(self.ptr)
+        } else {
+            None
+        }
+    }
+
+    fn remove(&mut self, n: &usize) {
+        self.inner[*n] = false;
+    }
+}
+
 struct Game {
     field: Field,
     // FIXME: Have a game board?
     inner: Vec<Vec<i32>>,
-    a_pq: BTreeSet<usize>,
-    b_pq: BTreeSet<usize>,
+    a_pq: BitMap,
+    b_pq: BitMap,
     move_a: Vec<(isize, isize)>,
     move_b: Vec<(isize, isize)>,
 }
@@ -114,8 +142,8 @@ impl Game {
         Self {
             field: Field::new(n),
             inner: vec![vec![0; n]; n],
-            a_pq: BTreeSet::from_iter(1..=n * n),
-            b_pq: BTreeSet::from_iter(1..=n * n),
+            a_pq: BitMap::new(n * n),
+            b_pq: BitMap::new(n * n),
             move_a,
             move_b,
         }
