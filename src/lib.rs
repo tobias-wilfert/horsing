@@ -27,7 +27,7 @@ struct Position {
 }
 
 impl Position {
-    fn go(mut self, direction: &Direction) -> Self {
+    fn go(mut self, direction: Direction) -> Self {
         match direction {
             Direction::Right => self.x += 1,
             Direction::Down => self.y += 1,
@@ -86,10 +86,10 @@ impl Field {
             lookup.push(pos);
             // Do a dummy move see if it gets us out of bounds
             // if not that is the move else make a turn and do the move
-            let mut new_pos = pos.go(&direction);
+            let mut new_pos = pos.go(direction);
             if Self::bad(new_pos, &inner) {
                 direction = direction.turn();
-                new_pos = pos.go(&direction);
+                new_pos = pos.go(direction);
             }
             pos = new_pos;
         }
