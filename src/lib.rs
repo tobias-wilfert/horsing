@@ -1,3 +1,5 @@
+use wasm_bindgen::prelude::*;
+
 #[derive(Debug, Clone, Copy)]
 enum Direction {
     Right,
@@ -25,16 +27,14 @@ struct Position {
 }
 
 impl Position {
-    // FIXME: This can be implemented more nicely.
-    fn go(self, direction: &Direction) -> Self {
-        let Position { y, x } = self;
-
+    fn go(mut self, direction: &Direction) -> Self {
         match direction {
-            Direction::Right => Position::new(y, x + 1),
-            Direction::Down => Position::new(y + 1, x),
-            Direction::Left => Position::new(y, x - 1),
-            Direction::Up => Position::new(y - 1, x),
-        }
+            Direction::Right => self.x += 1,
+            Direction::Down => self.y += 1,
+            Direction::Left => self.x -= 1,
+            Direction::Up => self.y -= 1,
+        };
+        self
     }
 
     fn new(y: isize, x: isize) -> Self {
@@ -59,26 +59,26 @@ impl Field {
         self.lookup.get(len - num).copied()
     }
 
-    fn pos_to_num(&self, pos: &Position) -> Option<usize> {
+    fn pos_to_num(&self, pos: Position) -> Option<usize> {
         let Position { y, x } = pos;
-        let y = *y as usize;
-        let x = *x as usize;
-        self.inner.get(y).and_then(|s| s.get(x)).copied()
+        self.inner
+            .get(y as usize)
+            .and_then(|r| r.get(x as usize))
+            .copied()
     }
 
     fn bad(pos: Position, field: &Vec<Vec<usize>>) -> bool {
         let Position { y, x } = pos;
-        y < 0
-            || y as usize >= field.len()
-            || x < 0
-            || x as usize >= field[0].len()
-            || field[y as usize][x as usize] != 0
+        !matches!(
+            field.get(y as usize).and_then(|r| r.get(x as usize)),
+            Some(0)
+        )
     }
 
     fn new(n: usize) -> Self {
         let mut inner = vec![vec![0; n]; n];
         let mut lookup = Vec::with_capacity(n * n);
-        let mut pos = Position { y: 0, x: 0 };
+        let mut pos = Position::new(0, 0);
         let mut direction = Direction::Right;
 
         for c in (1..=(n * n)).rev() {
@@ -125,6 +125,10 @@ impl BitMap {
     fn remove(&mut self, n: &usize) {
         self.inner[*n] = false;
     }
+
+    fn empty(&self) -> bool {
+        self.inner.len() == self.ptr
+    }
 }
 
 struct Game {
@@ -150,19 +154,19 @@ impl Game {
     }
 
     fn step(&mut self) {
-        while let Some(v) = self.a_pq.pop_first() {
-            // Mark the position
+        while !self.a_pq.empty() || !self.b_pq.empty() {
+            if let Some(v) = self.a_pq.pop_first() {
             let Position { y, x } = self.field.num_to_pos(v).unwrap();
             self.inner[y as usize][x as usize] = 1;
 
-            //  Remove all the now invalid fields
             self.b_pq.remove(&v);
             for cp in self
                 .apply(self.field.num_to_pos(v).unwrap(), &self.move_a)
                 .iter()
-                .filter_map(|p| self.field.pos_to_num(p))
+                    .filter_map(|&p| self.field.pos_to_num(p))
             {
                 self.b_pq.remove(&cp);
+                }
             }
 
             if let Some(v) = self.b_pq.pop_first() {
@@ -173,41 +177,22 @@ impl Game {
                 for cp in self
                     .apply(self.field.num_to_pos(v).unwrap(), &self.move_b)
                     .iter()
-                    .filter_map(|p| self.field.pos_to_num(p))
+                    .filter_map(|&p| self.field.pos_to_num(p))
                 {
                     self.a_pq.remove(&cp);
                 }
             }
         }
-
-        // Could be that there are still moves for B left
-        while let Some(v) = self.b_pq.pop_first() {
-            let Position { y, x } = self.field.num_to_pos(v).unwrap();
-            self.inner[y as usize][x as usize] = 2;
-
-            self.a_pq.remove(&v);
-            for cp in self
-                .apply(self.field.num_to_pos(v).unwrap(), &self.move_b)
-                .iter()
-                .filter_map(|p| self.field.pos_to_num(p))
-            {
-                self.a_pq.remove(&cp);
-            }
-        }
     }
 
     fn apply(&self, pos: Position, moves: &[(isize, isize)]) -> Vec<Position> {
+        let Position { y, x } = pos;
         moves
             .iter()
-            .map(|&(dy, dx)| Position {
-                y: pos.y + dy,
-                x: pos.x + dx,
-            })
+            .map(|&(dy, dx)| Position::new(y + dy, x + dx))
             .collect()
     }
 }
-
-use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub struct GridResult {
