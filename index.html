@@ -58,6 +58,9 @@
       }
       button:hover { background: var(--bg); }
       button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+      input[type="number"] {
+        width: 80px; font: inherit; padding: 5px; border: 1px solid var(--line); border-radius: 8px;
+      }
       #status { font-size: 13px; color: var(--muted); min-height: 1.2em; }
       canvas {
         width: 80vmin; height: 80vmin; max-width: 700px; max-height: 700px;
@@ -92,10 +95,11 @@
       <input type="range" id="radius" min="2" max="5" step="1" value="3" />
       <span id="radius-out">3</span>
       <label style="margin-left:1rem;">Grid size</label>
-      <input type="number" id="size" value="400" min="10" max="4000" step="10" style="width:80px; font:inherit; padding:5px; border:1px solid var(--line); border-radius:8px;" />
+      <input type="number" id="size" value="400" min="10" max="4000" step="10" />
       <button id="clear-a">Clear A</button>
       <button id="clear-b">Clear B</button>
       <button id="render" class="primary">Render</button>
+      <button id="copy-link">Copy link</button>
     </div>
 
     <div id="status"></div>
@@ -105,15 +109,43 @@
       import init, { generate } from "./pkg/chess_pieces.js";
       const wasm = await init();
 
-      // ---- editor state ----
-      // Each board tracks a Set of "dy,dx" strings for toggled (attacked) cells.
+      const KNIGHT = ["-2,-1", "-2,1", "-1,2", "1,2", "2,1", "2,-1", "1,-2", "-1,-2"];
       const state = {
         radius: 3,
-        a: new Set(["-2,-1", "-2,1", "-1,2", "1,2", "2,1", "2,-1", "1,-2", "-1,-2"]), // knight default
-        b: new Set(["-2,-1", "-2,1", "-1,2", "1,2", "2,1", "2,-1", "1,-2", "-1,-2"]),
+        a: new Set(KNIGHT),
+        b: new Set(KNIGHT),
       };
 
       const k = (dy, dx) => `${dy},${dx}`;
+
+      function encodeState() {
+        const enc = (set) => [...set].join("_");
+        const ca = document.getElementById("color-a").value.slice(1);
+        const cb = document.getElementById("color-b").value.slice(1);
+        const size = +document.getElementById("size").value;
+        return [size, state.radius, ca, cb, enc(state.a), enc(state.b)].join("~");
+      }
+
+      function decodeState(str) {
+        try {
+          const [size, radius, ca, cb, a, b] = str.split("~");
+          state.radius = Math.max(2, Math.min(5, +radius || 3));
+          state.a = new Set(a ? a.split("_") : []);
+          state.b = new Set(b ? b.split("_") : []);
+          document.getElementById("size").value = +size || 400;
+          document.getElementById("color-a").value = "#" + (ca || "ff0000");
+          document.getElementById("color-b").value = "#" + (cb || "0000ff");
+          document.getElementById("radius").value = state.radius;
+          document.getElementById("radius-out").textContent = state.radius;
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function writeUrl() {
+        history.replaceState(null, "", "#" + encodeState());
+      }
 
       function buildBoard(which) {
         const board = document.getElementById("board-" + which);
@@ -127,7 +159,7 @@
           for (let dx = -r; dx <= r; dx++) {
             const cell = document.createElement("button");
             cell.className = "cell";
-            cell.style.color = color; // currentColor drives the .on fill
+            cell.style.color = color;
             if (dy === 0 && dx === 0) {
               cell.classList.add("center");
               cell.textContent = "X";
@@ -139,6 +171,7 @@
                 if (set.has(key)) set.delete(key);
                 else set.add(key);
                 cell.classList.toggle("on");
+                writeUrl();
               };
             }
             board.appendChild(cell);
@@ -146,7 +179,6 @@
         }
       }
 
-      // Convert a Set of "dy,dx" into the flat Int32Array [dy,dx,dy,dx,...]
       function toDeltas(set) {
         const flat = [];
         for (const s of set) {
@@ -161,7 +193,6 @@
         return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
       }
 
-      // ---- render via WASM ----
       function render() {
         const status = document.getElementById("status");
         const size = Math.max(10, Math.min(4000, +document.getElementById("size").value));
@@ -170,7 +201,6 @@
 
         status.textContent = `Generating ${size}×${size}…`;
 
-        // let the status paint before the heavy call
         requestAnimationFrame(() => {
           const t0 = performance.now();
           const result = generate(size, deltasA, deltasB);
@@ -204,22 +234,40 @@
         });
       }
 
-      // ---- wiring ----
       document.getElementById("radius").oninput = (e) => {
         state.radius = +e.target.value;
         document.getElementById("radius-out").textContent = state.radius;
         buildBoard("a");
         buildBoard("b");
+        writeUrl();
       };
-      document.getElementById("color-a").oninput = () => buildBoard("a");
-      document.getElementById("color-b").oninput = () => buildBoard("b");
-      document.getElementById("clear-a").onclick = () => { state.a.clear(); buildBoard("a"); };
-      document.getElementById("clear-b").onclick = () => { state.b.clear(); buildBoard("b"); };
+      document.getElementById("color-a").oninput = () => { buildBoard("a"); writeUrl(); };
+      document.getElementById("color-b").oninput = () => { buildBoard("b"); writeUrl(); };
+      document.getElementById("clear-a").onclick = () => { state.a.clear(); buildBoard("a"); writeUrl(); };
+      document.getElementById("clear-b").onclick = () => { state.b.clear(); buildBoard("b"); writeUrl(); };
+      document.getElementById("size").oninput = writeUrl;
       document.getElementById("render").onclick = render;
 
+      document.getElementById("copy-link").onclick = async () => {
+        writeUrl();
+        try {
+          await navigator.clipboard.writeText(window.location.href);
+          const btn = document.getElementById("copy-link");
+          const old = btn.textContent;
+          btn.textContent = "Copied!";
+          setTimeout(() => (btn.textContent = old), 1200);
+        } catch {
+          window.prompt("Copy this link:", window.location.href);
+        }
+      };
+
+      if (window.location.hash.length > 1) {
+        decodeState(decodeURIComponent(window.location.hash.slice(1)));
+      }
       buildBoard("a");
       buildBoard("b");
-      render(); // initial render with knight defaults
+      writeUrl();
+      render();
     </script>
   </body>
 </html>
